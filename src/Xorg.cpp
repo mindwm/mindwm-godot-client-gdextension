@@ -65,17 +65,17 @@ xcb_atom_t Xorg::get_atom(const char *atom_name){
 String Xorg::get_win_text_property(xcb_window_t win, xcb_atom_t atom){
   String text;
 
-  xcb_get_property_reply_t *text_prop = get_win_property(win, ATOM__NET_WM_NAME);
-  ERR_FAIL_COND_MSG(text_prop == NULL, vformat("cannot get string property of %d", win));
+  xcb_get_property_reply_t *text_prop = get_win_property(win, atom);
+//  ERR_FAIL_COND_MSG(text_prop == NULL, vformat("cannot get string property of %d", win));
+  ERR_FAIL_COND_V(text_prop == NULL, text);
 
-  const char *p_val = (const char *)xcb_get_property_value(wm_name);
+  const char *p_val = (const char *)xcb_get_property_value(text_prop);
   uint32_t len = xcb_get_property_value_length(text_prop);
   char buf[len+1];
   memcpy(buf, p_val, len);
   buf[len] = 0;
   text.parse_utf8(buf, 1024);
-  xw->set_wm_name(xw_name);
-  std::free(wm_name);
+  std::free(text_prop);
 
   return text;
 }
@@ -124,36 +124,8 @@ void Xorg::refresh_xorg_windows() {
       xw.instantiate();
 
       xcb_window_t win = ((xcb_window_t *)xcb_get_property_value(cl_list))[i];
-      xcb_get_property_reply_t *wm_name = get_win_property(win, ATOM__NET_WM_NAME);
-      if (wm_name) {
-        const char *p_name = (const char *)xcb_get_property_value(wm_name);
-        uint32_t len = xcb_get_property_value_length(wm_name);
-        char buf[len+1];
-        memcpy(buf, p_name, len);
-        buf[len] = 0;
-        String xw_name;
-        xw_name.parse_utf8(buf, 1024);
-//        WARN_PRINT(vformat("NAME: %s (%d)", xw_name, len));
-        xw->set_wm_name(xw_name);
-        std::free(wm_name);
-      }
-      else {
-        ERR_PRINT(vformat("cannot get WM_NAME for %d", win));
-        xw->set_wm_name(vformat("wid_%d", win));
-      }
-
-      xcb_get_property_reply_t *wm_class = get_win_property(win, ATOM_WM_CLASS);
-      ERR_FAIL_COND(wm_class == NULL);
-
-      const char *p_class = (const char *)xcb_get_property_value(wm_class);
-      uint32_t len = xcb_get_property_value_length(wm_class);
-      char buf[len+1];
-      memcpy(buf, p_class, len);
-      buf[len] = 0;
-      auto xw_class = String(buf);
-      xw->set_wm_class(xw_class);
-
-      std::free(wm_class);
+      xw->set_wm_name(get_win_text_property(win, ATOM__NET_WM_NAME));
+      xw->set_wm_class(get_win_text_property(win, ATOM_WM_CLASS));
 
       xcb_get_geometry_reply_t *geom =
         xcb_get_geometry_reply(
