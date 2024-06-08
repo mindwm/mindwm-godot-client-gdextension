@@ -1,3 +1,6 @@
+#include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/os.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/error_macros.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -14,8 +17,8 @@ void Xorg::_bind_methods() {
 }
 
 Xorg::Xorg() {
-	// Initialize any variables here.
-	time_passed = 0.0;
+  // Initialize any variables here.
+  time_passed = 0.0;
 }
 
 void Xorg::init(){
@@ -25,7 +28,7 @@ void Xorg::init(){
 }
 
 Xorg::~Xorg() {
-	// Add your cleanup here.
+  // Add your cleanup here.
 }
 
 void Xorg::_ready() {
@@ -49,8 +52,67 @@ TypedArray<XorgWindowInfo> Xorg::list_windows() {
   return ws;
 }
 
+void Xorg::_notification(int p_what) {
+  // Don't run if we're in the editor
+  if (Engine::get_singleton()->is_editor_hint()) {
+    return;
+  }
+
+  switch (p_what) {
+  case NOTIFICATION_READY: {
+    eventsWatcher.instantiate();
+    eventsWatcher->start(callable_mp(this, &Xorg::watchEvents), Thread::PRIORITY_NORMAL);
+  } break;
+  case NOTIFICATION_WM_CLOSE_REQUEST: {
+    if (eventsWatcher.is_valid()) {
+      eventsWatcher->wait_to_finish();
+    }
+
+    eventsWatcher.unref();
+  };
+  }
+}
+
 void Xorg::_process(double delta) {
-	time_passed += delta;
+  time_passed += delta;
+}
+
+void Xorg::watchEvents() {
+  xcb_connection_t *conn;
+  conn = xcb_connect(NULL, NULL);
+
+  xcb_screen_t *screen;
+  xcb_window_t root_window;
+  xcb_generic_event_t *event;
+  xcb_void_cookie_t cookie;
+
+  screen = xcb_setup_roots_iterator(xcb_get_setup(conn)).data;
+  root_window = screen->root;
+
+  cookie =
+    xcb_change_window_attributes_checked(
+        conn, root_window, XCB_CW_EVENT_MASK,
+        (const uint32_t[]){XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY});
+  xcb_flush(conn);
+
+  ERR_FAIL_COND(xcb_request_check(conn, cookie));
+
+  while ((event = xcb_wait_for_event(conn))) {
+    switch (event->response_type & ~0x80) {
+      case XCB_CREATE_NOTIFY:
+        xcb_create_notify_event_t *create_event = (xcb_create_notify_event_t *)event;
+        if (create_event->width > 1 || create_event->height > 1) {
+          UtilityFunctions::print(vformat("new window event: 0x%08x", create_event->window));
+          UtilityFunctions::print(vformat("\tWxH (%dx%d)", create_event->width, create_event->height));
+        }
+        else {
+          // maybe some utility windows
+        }
+        break;
+    }
+    std::free(event);
+  }
+  xcb_disconnect(conn);
 }
 
 // utility_functions

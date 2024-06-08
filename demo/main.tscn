@@ -8,7 +8,7 @@
 script = ExtResource("1_gocsj")
 
 [node name="GDExample" type="GDExample" parent="."]
-position = Vector2(10.8368, 3.38689)
+position = Vector2(13.8652, 7.06733)
 texture = ExtResource("1_t1sxc")
 centered = false
 
