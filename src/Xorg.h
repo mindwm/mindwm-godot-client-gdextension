@@ -13,10 +13,12 @@ class Xorg : public Node {
 
 private:
   Ref<Thread> eventsWatcher;
+  bool eventsWatcherTerminated;
   xcb_connection_t* conn;
   Vector<Ref<XorgWindowInfo>> windows;
 	double time_passed;
 
+  void send_xorg_dummy_event();
   xcb_atom_t get_atom(const char *atom_name);
   xcb_window_t get_window_parent(xcb_window_t win);
   xcb_get_property_reply_t* get_win_property(xcb_window_t win, xcb_atom_t atom);

@@ -14,7 +14,7 @@ script = ExtResource("3_w0xqy")
 [node name="RootUI" parent="." instance=ExtResource("4_x167x")]
 
 [node name="GDExample" type="GDExample" parent="."]
-position = Vector2(7.87944, 0.12814)
+position = Vector2(19.858, 1.31803)
 texture = ExtResource("1_t1sxc")
 centered = false
 

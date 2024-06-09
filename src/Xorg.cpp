@@ -84,10 +84,15 @@ void Xorg::_notification(int p_what) {
 
   switch (p_what) {
   case NOTIFICATION_READY: {
+    eventsWatcherTerminated = false;
     eventsWatcher.instantiate();
     eventsWatcher->start(callable_mp(this, &Xorg::watchEvents), Thread::PRIORITY_NORMAL);
   } break;
   case NOTIFICATION_WM_CLOSE_REQUEST: {
+    eventsWatcherTerminated = true;
+    // NOTE: we need to send a dummy event to the root window
+    // to unblock the watcher thread and allow it to finish the tasks
+    send_xorg_dummy_event();
     if (eventsWatcher.is_valid()) {
       eventsWatcher->wait_to_finish();
     }
@@ -122,6 +127,9 @@ void Xorg::watchEvents() {
   ERR_FAIL_COND(xcb_request_check(conn, cookie));
 
   while ((event = xcb_wait_for_event(conn))) {
+    if (eventsWatcherTerminated)
+      break;
+
     switch (event->response_type & ~0x80) {
       case XCB_CREATE_NOTIFY:
         {
@@ -175,7 +183,30 @@ void Xorg::watchEvents() {
   xcb_disconnect(conn);
 }
 
-// utility_functions
+void Xorg::send_xorg_dummy_event() {
+  // TODO: need to send proper event to trigger the
+  // eventWatcher thread. Right now it's a placeholder
+  // utility_functions
+  xcb_screen_t *screen = xcb_setup_roots_iterator(xcb_get_setup(conn)).data;
+  xcb_window_t root = screen->root;
+  
+  // Create a dummy event
+  xcb_client_message_event_t event = {
+      .response_type = XCB_CLIENT_MESSAGE,
+      .format = 32,
+      .sequence = 0,
+      .window = root,
+      .type = XCB_ATOM_NONE,
+      .data = {0}
+  };
+  
+  // Send the dummy event to the root window
+  xcb_send_event(conn, 0, root, XCB_EVENT_MASK_NO_EVENT, (char *)&event);
+  UtilityFunctions::print("[mindwm]: sending dummy event to the root window");
+//  xcb_send_event(conn, 0, root, XCB_CW_EVENT_MASK, (char *)&event);
+  xcb_flush(conn);
+}
+
 xcb_atom_t Xorg::get_atom(const char *atom_name){
   xcb_intern_atom_cookie_t atom_c = xcb_intern_atom(conn, 1, strlen(atom_name), atom_name);
   xcb_intern_atom_reply_t *atom = xcb_intern_atom_reply(conn, atom_c, NULL);
@@ -266,14 +297,15 @@ void Xorg::add_window(xcb_window_t win, xcb_window_t parent) {
       &err);
   ERR_FAIL_COND(err != NULL);
   Rect2i r = Rect2i(
-      geom->x, geom->y, geom->width, geom->height);
+//      trans_coord->dst_x, trans_coord->dst_y,
+      geom->x, geom->y,
+      geom->width, geom->height);
 
   xw->set_wm_rect(r);
-  /*
-  printf("\tTransXY: (%d, %d)\n\tGeom (x,y) (w,h) (b): (%d, %d) (%d, %d) (%d)\n",
-  trans_coord->dst_x, trans_coord->dst_y,
+
+  printf("\t(%x) TransXY: (%d, %d)\n\tGeom (x,y) (w,h) (b): (%d, %d) (%d, %d) (%d)\n",
+  geom->root, trans_coord->dst_x, trans_coord->dst_y,
   geom->x, geom->y, geom->width, geom->height, geom->border_width);
-  */
 
   std::free(geom);
   std::free(trans_coord);
