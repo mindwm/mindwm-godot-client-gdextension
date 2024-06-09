@@ -14,9 +14,10 @@ script = ExtResource("3_w0xqy")
 [node name="RootUI" parent="." instance=ExtResource("4_x167x")]
 
 [node name="GDExample" type="GDExample" parent="."]
-position = Vector2(19.858, 1.31803)
+position = Vector2(17.3305, 18.1556)
 texture = ExtResource("1_t1sxc")
 centered = false
 
+[connection signal="window_configured" from="Xorg" to="." method="_on_xorg_window_configured"]
 [connection signal="window_created" from="Xorg" to="." method="_on_xorg_window_created"]
 [connection signal="window_destroyed" from="Xorg" to="." method="_on_xorg_window_destroyed"]

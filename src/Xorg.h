@@ -25,6 +25,7 @@ private:
   String get_win_text_property(xcb_window_t win, xcb_atom_t atom);
   void add_window(xcb_window_t win, xcb_window_t parent);
   void remove_window(Ref<XorgWindowInfo> elem);
+  void configure_window(Ref<XorgWindowInfo> w, Rect2i rect);
   void list_xorg_windows();
   void watchEvents();
 

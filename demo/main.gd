@@ -38,3 +38,10 @@ func _on_xorg_window_destroyed(window_info: Object) -> void:
 		if ilist.get_item_text(i) == t:
 			ilist.remove_item(i)
 		
+
+
+func _on_xorg_window_configured(window_info: Object) -> void:
+	print("event window_configured received: %s (%s)" % 
+	  [window_info.get_name(),
+		window_info.get_rect()
+	  ])

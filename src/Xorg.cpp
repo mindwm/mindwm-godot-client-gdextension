@@ -17,6 +17,7 @@ void Xorg::_bind_methods() {
   // signals
   ADD_SIGNAL(MethodInfo("window_created", PropertyInfo(Variant::OBJECT, "window_info")));
   ADD_SIGNAL(MethodInfo("window_destroyed", PropertyInfo(Variant::OBJECT, "window_info")));
+  ADD_SIGNAL(MethodInfo("window_configured", PropertyInfo(Variant::OBJECT, "window_info")));
 }
 
 Xorg::Xorg() {
@@ -121,7 +122,11 @@ void Xorg::watchEvents() {
   cookie =
     xcb_change_window_attributes_checked(
         conn, root_window, XCB_CW_EVENT_MASK,
-        (const uint32_t[]){XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY});
+        (const uint32_t[])
+        { XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY
+        | XCB_EVENT_MASK_STRUCTURE_NOTIFY
+        }
+        );
   xcb_flush(conn);
 
   ERR_FAIL_COND(xcb_request_check(conn, cookie));
@@ -173,6 +178,34 @@ void Xorg::watchEvents() {
         if (w != NULL) {
           UtilityFunctions::print(vformat("set parent: 0x%08x old 0x%x new 0x%x", w->get_win_id(), w->get_parent_id(), reparent_event->parent));
           w->set_parent_id(reparent_event->parent);
+        }
+
+        break;
+        }
+      case XCB_CONFIGURE_NOTIFY:
+        {
+        xcb_configure_notify_event_t *configure_event = (xcb_configure_notify_event_t *)event;
+        UtilityFunctions::print(vformat("configure window event: 0x%08x Rect(%d, %d, %d, %d)",
+              configure_event->window,
+              configure_event->x,
+              configure_event->y,
+              configure_event->width,
+              configure_event->height
+              ));
+
+        Ref<XorgWindowInfo> w;
+        w = find_window_by_id(configure_event->window);
+        if (w == NULL)
+          w = find_window_by_parent_id(configure_event->window);
+
+        if (w != NULL) {
+          configure_window(w,
+              Rect2i(
+                configure_event->x,
+                configure_event->y,
+                configure_event->width,
+                configure_event->height
+                ));
         }
 
         break;
@@ -312,6 +345,11 @@ void Xorg::add_window(xcb_window_t win, xcb_window_t parent) {
 
   windows.push_back(xw);
   call_deferred("emit_signal", "window_created", xw);
+}
+
+void Xorg::configure_window(Ref<XorgWindowInfo> w, Rect2i rect) {
+  w->set_wm_rect(rect);
+  call_deferred("emit_signal", "window_configured", w);
 }
 
 void Xorg::refresh_xorg_windows() {
