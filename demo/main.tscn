@@ -1,16 +1,22 @@
-[gd_scene load_steps=4 format=3 uid="uid://dys3c0e6k8bes"]
+[gd_scene load_steps=5 format=3 uid="uid://dys3c0e6k8bes"]
 
 [ext_resource type="Script" path="res://main.gd" id="1_gocsj"]
 [ext_resource type="Texture2D" uid="uid://b3fh6ax3pge35" path="res://icon.svg" id="1_t1sxc"]
 [ext_resource type="Script" path="res://xorg.gd" id="3_w0xqy"]
+[ext_resource type="PackedScene" uid="uid://2r3r8x85lodo" path="res://root_ui.tscn" id="4_x167x"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_gocsj")
 
+[node name="Xorg" type="Xorg" parent="."]
+script = ExtResource("3_w0xqy")
+
+[node name="RootUI" parent="." instance=ExtResource("4_x167x")]
+
 [node name="GDExample" type="GDExample" parent="."]
-position = Vector2(13.8652, 7.06733)
+position = Vector2(7.87944, 0.12814)
 texture = ExtResource("1_t1sxc")
 centered = false
 
-[node name="Xorg" type="Xorg" parent="."]
-script = ExtResource("3_w0xqy")
+[connection signal="window_created" from="Xorg" to="." method="_on_xorg_window_created"]
+[connection signal="window_destroyed" from="Xorg" to="." method="_on_xorg_window_destroyed"]

@@ -18,8 +18,11 @@ private:
 	double time_passed;
 
   xcb_atom_t get_atom(const char *atom_name);
+  xcb_window_t get_window_parent(xcb_window_t win);
   xcb_get_property_reply_t* get_win_property(xcb_window_t win, xcb_atom_t atom);
   String get_win_text_property(xcb_window_t win, xcb_atom_t atom);
+  void add_window(xcb_window_t win, xcb_window_t parent);
+  void remove_window(Ref<XorgWindowInfo> elem);
   void list_xorg_windows();
   void watchEvents();
 
@@ -32,6 +35,8 @@ public:
 	~Xorg();
 
   Ref<XorgWindowInfo> get_window(int p_index);
+  Ref<XorgWindowInfo> find_window_by_id(xcb_window_t win_id);
+  Ref<XorgWindowInfo> find_window_by_parent_id(xcb_window_t parent_id);
   TypedArray<XorgWindowInfo> list_windows();
   void refresh_xorg_windows();
 

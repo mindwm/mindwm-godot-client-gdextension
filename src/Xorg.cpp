@@ -14,6 +14,9 @@ void Xorg::_bind_methods() {
   ClassDB::bind_method(D_METHOD("init"), &Xorg::init);
   ClassDB::bind_method(D_METHOD("list_windows"), &Xorg::list_windows);
   ClassDB::bind_method(D_METHOD("refresh_xorg_windows"), &Xorg::refresh_xorg_windows);
+  // signals
+  ADD_SIGNAL(MethodInfo("window_created", PropertyInfo(Variant::OBJECT, "window_info")));
+  ADD_SIGNAL(MethodInfo("window_destroyed", PropertyInfo(Variant::OBJECT, "window_info")));
 }
 
 Xorg::Xorg() {
@@ -39,6 +42,27 @@ Ref<XorgWindowInfo> Xorg::get_window(int p_index) {
   ERR_FAIL_INDEX_V(p_index, windows.size(), nullptr);
 
   return windows[p_index];
+}
+Ref<XorgWindowInfo> Xorg::find_window_by_id(xcb_window_t win_id) {
+  Ref<XorgWindowInfo> res;
+  for (Ref<XorgWindowInfo> &E : windows) {
+    if (E->get_win_id() == win_id) {
+      res = E;
+      break;
+    }
+  }
+  return res;
+}
+
+Ref<XorgWindowInfo> Xorg::find_window_by_parent_id(xcb_window_t parent_id) {
+  Ref<XorgWindowInfo> res;
+  for (Ref<XorgWindowInfo> &E : windows) {
+    if (E->get_parent_id() == parent_id) {
+      res = E;
+      break;
+    }
+  }
+  return res;
 }
 
 TypedArray<XorgWindowInfo> Xorg::list_windows() {
@@ -100,15 +124,51 @@ void Xorg::watchEvents() {
   while ((event = xcb_wait_for_event(conn))) {
     switch (event->response_type & ~0x80) {
       case XCB_CREATE_NOTIFY:
+        {
         xcb_create_notify_event_t *create_event = (xcb_create_notify_event_t *)event;
         if (create_event->width > 1 || create_event->height > 1) {
-          UtilityFunctions::print(vformat("new window event: 0x%08x", create_event->window));
+          UtilityFunctions::print(vformat("new window event: 0x%08x (0x%08x)", create_event->window, create_event->parent));
           UtilityFunctions::print(vformat("\tWxH (%dx%d)", create_event->width, create_event->height));
+          add_window(create_event->window, create_event->parent);
         }
         else {
           // maybe some utility windows
         }
         break;
+        }
+      case XCB_DESTROY_NOTIFY:
+        {
+        xcb_destroy_notify_event_t *destroy_event = (xcb_destroy_notify_event_t *)event;
+        UtilityFunctions::print(vformat("destroy window event: 0x%08x", destroy_event->window));
+        Ref<XorgWindowInfo> w;
+        w = find_window_by_id(destroy_event->window);
+        if (w != NULL) {
+          UtilityFunctions::print(vformat("destroy by win_id 0x%x", w->get_win_id()));
+          remove_window(w);
+        }
+        else {
+          w = find_window_by_parent_id(destroy_event->window);
+          if (w != NULL) {
+            UtilityFunctions::print(vformat("destroy by parent_id 0x%x", w->get_win_id()));
+            remove_window(w);
+          }
+        }
+        break;
+        }
+      case XCB_REPARENT_NOTIFY:
+        {
+        xcb_reparent_notify_event_t *reparent_event = (xcb_reparent_notify_event_t *)event;
+        UtilityFunctions::print(vformat("reparent window event: 0x%08x new parent 0x%x", reparent_event->window, reparent_event->parent));
+
+        Ref<XorgWindowInfo> w;
+        w = find_window_by_id(reparent_event->window);
+        if (w != NULL) {
+          UtilityFunctions::print(vformat("set parent: 0x%08x old 0x%x new 0x%x", w->get_win_id(), w->get_parent_id(), reparent_event->parent));
+          w->set_parent_id(reparent_event->parent);
+        }
+
+        break;
+        }
     }
     std::free(event);
   }
@@ -122,6 +182,18 @@ xcb_atom_t Xorg::get_atom(const char *atom_name){
   xcb_atom_t r = atom->atom;
   std::free(atom);
   return r;
+}
+
+xcb_window_t Xorg::get_window_parent(xcb_window_t win) {
+  xcb_generic_error_t *err = NULL;
+
+  xcb_query_tree_reply_t * rep =
+    xcb_query_tree_reply (conn,
+      xcb_query_tree(conn, win),
+      &err);
+
+  ERR_FAIL_COND_V(err != NULL, -1);
+  return rep->parent;
 }
 
 String Xorg::get_win_text_property(xcb_window_t win, xcb_atom_t atom){
@@ -158,15 +230,64 @@ xcb_get_property_reply_t* Xorg::get_win_property(xcb_window_t win, xcb_atom_t at
   return prop;
 }
 
+void Xorg::remove_window(Ref<XorgWindowInfo> elem) {
+  int i = windows.find(elem);
+  if (i) {
+    // TODO: need to unref the elem here?
+    windows.remove_at(i);
+    call_deferred("emit_signal", "window_destroyed", elem);
+  }
+}
+
+void Xorg::add_window(xcb_window_t win, xcb_window_t parent) {
+  xcb_generic_error_t *err = NULL;
+  xcb_atom_t ATOM__NET_WM_NAME = get_atom("_NET_WM_NAME");
+  xcb_atom_t ATOM_WM_CLASS = get_atom("WM_CLASS");
+
+  Ref<XorgWindowInfo> xw;
+  xw.instantiate();
+
+  xw->set_win_id(win);
+  xw->set_parent_id(parent);
+  xw->set_wm_name(get_win_text_property(win, ATOM__NET_WM_NAME));
+  xw->set_wm_class(get_win_text_property(win, ATOM_WM_CLASS));
+
+  xcb_get_geometry_reply_t *geom =
+    xcb_get_geometry_reply(
+      conn,
+      xcb_get_geometry(conn, win),
+      &err);
+  ERR_FAIL_COND(err != NULL);
+
+  xcb_translate_coordinates_reply_t* trans_coord =
+    xcb_translate_coordinates_reply(
+      conn,
+      xcb_translate_coordinates(conn, win, geom->root, geom->x, geom->y),
+      &err);
+  ERR_FAIL_COND(err != NULL);
+  Rect2i r = Rect2i(
+      geom->x, geom->y, geom->width, geom->height);
+
+  xw->set_wm_rect(r);
+  /*
+  printf("\tTransXY: (%d, %d)\n\tGeom (x,y) (w,h) (b): (%d, %d) (%d, %d) (%d)\n",
+  trans_coord->dst_x, trans_coord->dst_y,
+  geom->x, geom->y, geom->width, geom->height, geom->border_width);
+  */
+
+  std::free(geom);
+  std::free(trans_coord);
+
+  windows.push_back(xw);
+  call_deferred("emit_signal", "window_created", xw);
+}
+
 void Xorg::refresh_xorg_windows() {
   xcb_generic_error_t *err = NULL;
   xcb_screen_iterator_t screen_iter =
     xcb_setup_roots_iterator(xcb_get_setup(conn));
 
   xcb_atom_t ATOM__NET_CLIENT_LIST = get_atom("_NET_CLIENT_LIST");
-  xcb_atom_t ATOM__NET_WM_NAME = get_atom("_NET_WM_NAME");
-  xcb_atom_t ATOM_WM_CLASS = get_atom("WM_CLASS");
-
   windows.clear();
 
   for(; screen_iter.rem > 0; xcb_screen_next(&screen_iter)) {
@@ -182,40 +303,9 @@ void Xorg::refresh_xorg_windows() {
 
     uint32_t len = xcb_get_property_value_length(cl_list) / sizeof(xcb_window_t);
     for (uint32_t i = 0; i < len; i++) {
-      Ref<XorgWindowInfo> xw;
-      xw.instantiate();
-
       xcb_window_t win = ((xcb_window_t *)xcb_get_property_value(cl_list))[i];
-      xw->set_wm_name(get_win_text_property(win, ATOM__NET_WM_NAME));
-      xw->set_wm_class(get_win_text_property(win, ATOM_WM_CLASS));
-
-      xcb_get_geometry_reply_t *geom =
-        xcb_get_geometry_reply(
-          conn,
-          xcb_get_geometry(conn, win),
-          &err);
-      ERR_FAIL_COND(err != NULL);
-
-      xcb_translate_coordinates_reply_t* trans_coord =
-        xcb_translate_coordinates_reply(
-          conn,
-          xcb_translate_coordinates(conn, win, geom->root, geom->x, geom->y),
-          &err);
-      ERR_FAIL_COND(err != NULL);
-      Rect2i r = Rect2i(
-          geom->x, geom->y, geom->width, geom->height);
-
-      xw->set_wm_rect(r);
-      /*
-      printf("\tTransXY: (%d, %d)\n\tGeom (x,y) (w,h) (b): (%d, %d) (%d, %d) (%d)\n",
-      trans_coord->dst_x, trans_coord->dst_y,
-      geom->x, geom->y, geom->width, geom->height, geom->border_width);
-      */
-
-      std::free(geom);
-      std::free(trans_coord);
-
-      windows.push_back(xw);
+      xcb_window_t parent = get_window_parent(win);
+      add_window(win, parent);
     }
   }
 }
