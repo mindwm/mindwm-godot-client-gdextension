@@ -13,6 +13,7 @@ env = SConscript("godot-cpp/SConstruct")
 # - LINKFLAGS are for linking flags
 
 # tweak this if you want to use different folders, or more folders, to store your source code in.
+env["ENV"] = os.environ
 env.Append(CPPPATH=["src/"])
 env.Append(LIBS=['X11', 'X11-xcb', 'xcb', 'xcb-image', 'xcb-randr'])
 sources = Glob("src/*.cpp")
