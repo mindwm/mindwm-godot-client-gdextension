@@ -5,6 +5,7 @@ let
   libs = [ scons libpulseaudio freetype openssl alsaLib libGLU zlib yasm vulkan-loader libGL
   ] ++ (with xorg; [
 	libX11
+	libXcomposite
 	libXcursor
 	libXinerama
 	libXrandr
