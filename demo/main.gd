@@ -21,8 +21,9 @@ func _ready() -> void:
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta: float) -> void:
-	if (win_ndx >= 0):
-		$Xorg.capture_window_egl(win_ndx)
+	pass
+	#if (win_ndx >= 0):
+		#$Xorg.capture_window_egl(win_ndx)
 
 
 func _on_xorg_window_created(window_info: Object) -> void:
@@ -58,3 +59,6 @@ func _on_window_selected(ndx : int) -> void:
 	var wt = $Xorg.get_wm_window_texture(win_ndx)
 	$WindowTexture.texture = wt;
 	$WindowTexture.material.set_shader_parameter("tex", wt)
+
+	if (win_ndx >= 0):
+		$Xorg.capture_window_egl(win_ndx)
