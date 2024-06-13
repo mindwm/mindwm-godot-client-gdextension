@@ -9,13 +9,18 @@
 script = ExtResource("1_gocsj")
 
 [node name="Xorg" type="Xorg" parent="."]
+_import_path = NodePath("")
+unique_name_in_owner = false
+process_mode = 0
+process_priority = 0
+process_physics_priority = 0
+process_thread_group = 0
+physics_interpolation_mode = 0
+auto_translate_mode = 0
+editor_description = ""
 script = ExtResource("3_w0xqy")
 
 [node name="WindowTexture" parent="." instance=ExtResource("5_plcpf")]
 scale = Vector2(1, 1)
 
 [node name="RootUI" parent="." instance=ExtResource("4_x167x")]
-
-[connection signal="window_configured" from="Xorg" to="." method="_on_xorg_window_configured"]
-[connection signal="window_created" from="Xorg" to="." method="_on_xorg_window_created"]
-[connection signal="window_destroyed" from="Xorg" to="." method="_on_xorg_window_destroyed"]

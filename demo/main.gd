@@ -61,4 +61,4 @@ func _on_window_selected(ndx : int) -> void:
 	$WindowTexture.material.set_shader_parameter("tex", wt)
 
 	if (win_ndx >= 0):
-		$Xorg.capture_window_egl(win_ndx)
+		$Xorg.capture_window_gl(win_ndx)

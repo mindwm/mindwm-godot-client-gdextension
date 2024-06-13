@@ -10,6 +10,10 @@
 #include <godot_cpp/variant/variant.hpp>
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
+
+#include <GL/glx.h>
+#include <GL/glxext.h>
+
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <X11/Xlib.h>
@@ -29,6 +33,7 @@ void Xorg::_bind_methods() {
   ClassDB::bind_method(D_METHOD("get_wm_window", "p_index"), &Xorg::get_wm_window);
   ClassDB::bind_method(D_METHOD("get_wm_window_texture", "p_index"), &Xorg::get_wm_window_texture);
   ClassDB::bind_method(D_METHOD("capture_window", "p_index"), &Xorg::capture_window);
+  ClassDB::bind_method(D_METHOD("capture_window_gl", "p_index"), &Xorg::capture_window_gl);
   ClassDB::bind_method(D_METHOD("capture_window_egl", "p_index"), &Xorg::capture_window_egl);
   // signals
   ADD_SIGNAL(MethodInfo("window_created", PropertyInfo(Variant::OBJECT, "window_info")));
@@ -466,21 +471,29 @@ void Xorg::capture_window_egl(int p_window_index) {
     EGL_NONE,
   };
 
+  XCompositeRedirectWindow((Display*)disp, w->get_win_id(), CompositeRedirectAutomatic);
   pixmap = XCompositeNameWindowPixmap((Display*)disp, w->get_win_id());
   ERR_FAIL_COND(pixmap == None);
 
+  UtilityFunctions::print(vformat("source pixmap : %d", pixmap));
+
   texture_id = tex->get_device_texture_id();
+
+  UtilityFunctions::print(vformat("target texture_id: %d", texture_id));
+
   glBindTexture(GL_TEXTURE_2D, texture_id);
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
- 
+
   while(glGetError()) {}
-  ERR_FAIL_COND(eglGetError() != EGL_SUCCESS);
+  auto eglErr = eglGetError();
+  ERR_FAIL_COND_MSG(eglErr != EGL_SUCCESS, vformat("glerror: 0x%x", eglErr));
 
   image = eglCreateImage(egl_display, NULL, EGL_NATIVE_PIXMAP_KHR, (EGLClientBuffer)pixmap, pixmap_attrs);
+  //image = eglCreateImageKHR(egl_display, NULL, EGL_NATIVE_PIXMAP_KHR, (EGLClientBuffer)pixmap, pixmap_attrs);
   ERR_FAIL_NULL(image);
 
   glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
@@ -493,4 +506,112 @@ void Xorg::capture_window_egl(int p_window_index) {
   eglDestroyImage(egl_display, image);
 
   XFreePixmap((Display*)disp, pixmap);
+  XCompositeUnredirectWindow((Display*)disp, w->get_win_id(), CompositeRedirectAutomatic);
+}
+
+void Xorg::capture_window_gl(int p_window_index) {
+  int result = 0;
+  GLXFBConfig *configs = NULL;
+  Pixmap pixmap = None;
+  GLXPixmap glx_pixmap = None;
+  GLuint texture_id = 0;
+  int glx_pixmap_bound = 0;
+
+  Ref<XorgWindowInfo> w = get_wm_window(p_window_index);
+  Ref<XorgWindowTexture> tex = get_wm_window_texture(p_window_index);
+  Rect2i r = w->get_wm_rect();
+
+  const intptr_t pixmap_attrs[] = {
+    EGL_IMAGE_PRESERVED_KHR, EGL_TRUE,
+    EGL_NONE,
+  };
+
+  XCompositeRedirectWindow((Display*)disp, w->get_win_id(), CompositeRedirectAutomatic);
+
+  const int pixmap_config[] = {
+        GLX_BIND_TO_TEXTURE_RGB_EXT, True,
+        GLX_DRAWABLE_TYPE, GLX_PIXMAP_BIT | GLX_WINDOW_BIT,
+        GLX_BIND_TO_TEXTURE_TARGETS_EXT, GLX_TEXTURE_2D_BIT_EXT,
+        /*GLX_BIND_TO_MIPMAP_TEXTURE_EXT, True,*/
+        GLX_BUFFER_SIZE, 24,
+        GLX_RED_SIZE, 8,
+        GLX_GREEN_SIZE, 8,
+        GLX_BLUE_SIZE, 8,
+        GLX_ALPHA_SIZE, 0,
+        None
+    };
+
+    const int pixmap_attribs[] = {
+        GLX_TEXTURE_TARGET_EXT, GLX_TEXTURE_2D_EXT,
+        GLX_TEXTURE_FORMAT_EXT, GLX_TEXTURE_FORMAT_RGB_EXT,
+        /*GLX_MIPMAP_TEXTURE_EXT, True,*/
+        None
+    };
+
+    XWindowAttributes attr;
+    ERR_FAIL_COND_MSG(!XGetWindowAttributes((Display*)disp, w->get_win_id(), &attr), "Failed to get window attributes");
+
+    GLXFBConfig config;
+    int c;
+    configs = glXChooseFBConfig((Display*)disp, 0, pixmap_config, &c);
+    ERR_FAIL_COND_MSG(!configs, "Failed to choose fb config");
+
+    int found = 0;
+    for (int i = 0; i < c; i++) {
+        config = configs[i];
+        XVisualInfo *visual = glXGetVisualFromFBConfig((Display*)disp, config);
+        if (!visual)
+            continue;
+
+        if (attr.depth != visual->depth) {
+            XFree(visual);
+            continue;
+        }
+        XFree(visual);
+        found = 1;
+        break;
+    }
+
+    ERR_FAIL_COND_MSG(!found, "No matching fb config found");
+
+    pixmap = XCompositeNameWindowPixmap((Display*)disp, w->get_win_id());
+    ERR_FAIL_COND_MSG(!pixmap, "Pixmap");
+
+    glx_pixmap = glXCreatePixmap((Display*)disp, config, pixmap, pixmap_attribs);
+    ERR_FAIL_COND_MSG(!glx_pixmap, "glx_pixmap");
+
+    texture_id = tex->get_device_texture_id();
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+
+    glXBindTexImageARB((Display*) disp, glx_pixmap, GLX_FRONT_EXT);
+    glx_pixmap_bound = 1;
+
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+    glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+ 
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    XFree(configs);
+
+    glXDestroyPixmap((Display*)disp, glx_pixmap);
+    glXReleaseTexImageARB((Display*)disp, glx_pixmap, GLX_FRONT_EXT);
+    XFreePixmap((Display*)disp, pixmap);
+    XFree(configs);
+    /*
+    self->pixmap = pixmap;
+    self->glx_pixmap = glx_pixmap;
+    if(texture_id != 0)
+        self->texture_id = texture_id;
+    return 0;
+
+    cleanup:
+    if(texture_id != 0)     glDeleteTextures(1, &texture_id);
+    if(glx_pixmap)          glXDestroyPixmap(self->display, glx_pixmap);
+    if(glx_pixmap_bound)    glXReleaseTexImageEXT(self->display, glx_pixmap, GLX_FRONT_EXT);
+    if(pixmap)              XFreePixmap(self->display, pixmap);
+    if(configs)             XFree(configs);
+    return result;
+    */
 }
