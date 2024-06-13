@@ -4,7 +4,9 @@
 default_font_size = 24
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_j1jvp"]
+bg_color = Color(0.6, 0.6, 0.6, 0.180392)
 border_width_left = 256
+border_color = Color(0.8, 0.8, 0.8, 0.0784314)
 
 [node name="RootUI" type="Control"]
 layout_mode = 3
@@ -24,7 +26,5 @@ offset_bottom = 648.0
 size_flags_vertical = 3
 theme_override_styles/panel = SubResource("StyleBoxFlat_j1jvp")
 
-[node name="ItemList" type="ItemList" parent="PanelContainer"]
+[node name="WindowList" type="ItemList" parent="PanelContainer"]
 layout_mode = 2
-item_count = 1
-item_0/text = "Xorg Windows"

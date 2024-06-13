@@ -3,6 +3,7 @@
 #include "gdexample.h"
 #include "Xorg.h"
 #include "XorgWindowInfo.h"
+#include "XorgWindowTexture.h"
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/defs.hpp>
@@ -18,6 +19,7 @@ void initialize_module(ModuleInitializationLevel p_level) {
 	ClassDB::register_class<GDExample>();
 	ClassDB::register_class<Xorg>();
 	ClassDB::register_class<XorgWindowInfo>();
+	ClassDB::register_class<XorgWindowTexture>();
 }
 
 void uninitialize_module(ModuleInitializationLevel p_level) {
