@@ -39,7 +39,6 @@ private:
   void list_xorg_windows();
   void watchEvents();
   void capture_window(int p_window_index);
-  void capture_window_gl(int p_window_index);
   void capture_window_egl(int p_window_index);
 
 protected:
