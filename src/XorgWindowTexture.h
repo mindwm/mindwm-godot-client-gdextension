@@ -12,11 +12,14 @@ class XorgWindowTexture : public ImageTexture {
 
 private:
 //  mutable RID texture;
+  uint64_t _internal_texture_id;
 
 protected:
   static void _bind_methods();
 
 public:
+  uint64_t get_device_texture_id();
+
   XorgWindowTexture();
   ~XorgWindowTexture();
 };

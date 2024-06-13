@@ -8,7 +8,12 @@
 #include <godot_cpp/variant/color_names.inc.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/variant.hpp>
-//#include <X11/Xlib.h>
+#define GL_GLEXT_PROTOTYPES
+#include <GL/gl.h>
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <X11/Xlib.h>
+#include <X11/extensions/Xcomposite.h>
 //#include <X11/Xlib-xcb.h>
 #include <xcb/xcb.h>
 #include <xcb/composite.h>
@@ -24,6 +29,7 @@ void Xorg::_bind_methods() {
   ClassDB::bind_method(D_METHOD("get_wm_window", "p_index"), &Xorg::get_wm_window);
   ClassDB::bind_method(D_METHOD("get_wm_window_texture", "p_index"), &Xorg::get_wm_window_texture);
   ClassDB::bind_method(D_METHOD("capture_window", "p_index"), &Xorg::capture_window);
+  ClassDB::bind_method(D_METHOD("capture_window_egl", "p_index"), &Xorg::capture_window_egl);
   // signals
   ADD_SIGNAL(MethodInfo("window_created", PropertyInfo(Variant::OBJECT, "window_info")));
   ADD_SIGNAL(MethodInfo("window_destroyed", PropertyInfo(Variant::OBJECT, "window_info")));
@@ -32,10 +38,16 @@ void Xorg::_bind_methods() {
 
 Xorg::Xorg() {
   // Initialize any variables here.
-  time_passed = 0.0;
 }
 
 void Xorg::init(){
+  disp = (void*)XOpenDisplay(NULL);
+  ERR_FAIL_NULL(disp);
+//  egl_display = eglGetDisplay( (EGLNativeDisplayType) display);
+  egl_display = eglGetDisplay((Display*)disp);
+  ERR_FAIL_NULL(egl_display);
+  ERR_FAIL_COND_MSG(x11_supports_composite_named_window_pixmap() == false, "xcomposite_named_window_pixmap not supported");
+
   conn = xcb_connect(NULL, NULL);
   // TODO: need to check that a compositor is avaliable
   // in other case we cannot capture window content
@@ -250,6 +262,17 @@ void Xorg::send_xorg_dummy_event() {
   xcb_flush(conn);
 }
 
+bool Xorg::x11_supports_composite_named_window_pixmap() {
+    int extension_major;
+    int extension_minor;
+    if(!XCompositeQueryExtension((Display*)disp, &extension_major, &extension_minor))
+        return false;
+
+    int major_version;
+    int minor_version;
+    return XCompositeQueryVersion((Display*)disp, &major_version, &minor_version) && (major_version > 0 || minor_version >= 2);
+}
+
 xcb_atom_t Xorg::get_atom(const char *atom_name){
   xcb_intern_atom_cookie_t atom_c = xcb_intern_atom(conn, 1, strlen(atom_name), atom_name);
   xcb_intern_atom_reply_t *atom = xcb_intern_atom_reply(conn, atom_c, NULL);
@@ -407,27 +430,6 @@ xcb_screen_t *xcb_get_screen(xcb_connection_t *xcb, int screen) {
   return NULL;
 }
 
-bool Xorg::xcomp_check_ewmh(xcb_window_t root) {
-  xcb_atom_t ATOM__NET_SUPPORTING_WM_CHECK = get_atom("_NET_SUPPORTING_WM_CHECK");
-
-  xcb_get_property_reply_t *check =
-    get_win_property(root, ATOM__NET_SUPPORTING_WM_CHECK);
-  if (!check)
-    return false;
-   
-  xcb_window_t ewmh_window =
-    ((xcb_window_t *)xcb_get_property_value(check))[0];
-  std::free(check);
-   
-  xcb_get_property_reply_t *check2 = get_win_property(
-    ewmh_window, ATOM__NET_SUPPORTING_WM_CHECK);
-  if (!check2)
-    return false;
-  std::free(check2);
-   
-  return true;
-}
-
 void Xorg::capture_window(int p_window_index) {
   Ref<XorgWindowInfo> w = get_wm_window(p_window_index);
   Ref<XorgWindowTexture> tex = get_wm_window_texture(p_window_index);
@@ -448,4 +450,47 @@ void Xorg::capture_window(int p_window_index) {
   img->set_data(r.size.x, r.size.y, 0, Image::FORMAT_RGBA8, pba);
   tex->set_size_override(r.size);
   tex->set_image(img);
+}
+
+void Xorg::capture_window_egl(int p_window_index) {
+  int result = 0;
+  Pixmap pixmap = None;
+  GLuint texture_id = 0;
+  EGLImage image = NULL;
+  Ref<XorgWindowInfo> w = get_wm_window(p_window_index);
+  Ref<XorgWindowTexture> tex = get_wm_window_texture(p_window_index);
+  Rect2i r = w->get_wm_rect();
+
+  const intptr_t pixmap_attrs[] = {
+    EGL_IMAGE_PRESERVED_KHR, EGL_TRUE,
+    EGL_NONE,
+  };
+
+  pixmap = XCompositeNameWindowPixmap((Display*)disp, w->get_win_id());
+  ERR_FAIL_COND(pixmap == None);
+
+  texture_id = tex->get_device_texture_id();
+  glBindTexture(GL_TEXTURE_2D, texture_id);
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+ 
+  while(glGetError()) {}
+  ERR_FAIL_COND(eglGetError() != EGL_SUCCESS);
+
+  image = eglCreateImage(egl_display, NULL, EGL_NATIVE_PIXMAP_KHR, (EGLClientBuffer)pixmap, pixmap_attrs);
+  ERR_FAIL_NULL(image);
+
+  glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
+  ERR_FAIL_COND(glGetError() != 0 || eglGetError() != EGL_SUCCESS);
+
+//  self->pixmap = pixmap;
+
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  eglDestroyImage(egl_display, image);
+
+  XFreePixmap((Display*)disp, pixmap);
 }

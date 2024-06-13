@@ -22,7 +22,7 @@ func _ready() -> void:
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta: float) -> void:
 	if (win_ndx >= 0):
-		$Xorg.capture_window(win_ndx)
+		$Xorg.capture_window_egl(win_ndx)
 
 
 func _on_xorg_window_created(window_info: Object) -> void:
