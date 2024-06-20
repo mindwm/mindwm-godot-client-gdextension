@@ -1,6 +1,5 @@
 #include "register_types.h"
 
-#include "gdexample.h"
 #include "Xorg.h"
 #include "XorgWindowInfo.h"
 #include "XorgWindowTexture.h"
@@ -16,7 +15,6 @@ void initialize_module(ModuleInitializationLevel p_level) {
 		return;
 	}
 
-	ClassDB::register_class<GDExample>();
 	ClassDB::register_class<Xorg>();
 	ClassDB::register_class<XorgWindowInfo>();
 	ClassDB::register_class<XorgWindowTexture>();
@@ -30,7 +28,7 @@ void uninitialize_module(ModuleInitializationLevel p_level) {
 
 extern "C" {
 // Initialization.
-GDExtensionBool GDE_EXPORT example_library_init(GDExtensionInterfaceGetProcAddress p_get_proc_address, const GDExtensionClassLibraryPtr p_library, GDExtensionInitialization *r_initialization) {
+GDExtensionBool GDE_EXPORT xorg_library_init(GDExtensionInterfaceGetProcAddress p_get_proc_address, const GDExtensionClassLibraryPtr p_library, GDExtensionInitialization *r_initialization) {
 	godot::GDExtensionBinding::InitObject init_obj(p_get_proc_address, p_library, r_initialization);
 
 	init_obj.register_initializer(initialize_module);

@@ -18,17 +18,12 @@ env.Append(CPPPATH=["src/"])
 env.Append(LIBS=['X11', 'X11-xcb', 'xcb', 'xcb-composite', 'xcb-image', 'xcb-randr'])
 sources = Glob("src/*.cpp")
 
-if env["platform"] == "macos":
+if env["platform"] == "linux":
     library = env.SharedLibrary(
-        "demo/bin/libgdexample.{}.{}.framework/libgdexample.{}.{}".format(
-            env["platform"], env["target"], env["platform"], env["target"]
-        ),
+        "demo/bin/libxorg{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
         source=sources,
     )
 else:
-    library = env.SharedLibrary(
-        "demo/bin/libgdexample{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
-        source=sources,
-    )
+    library = None
 
 Default(library)
