@@ -11,11 +11,11 @@ let
 	libXrender
 	libXi
 	libXext
-	libXfixes
 	libxcb
 	xcbutilerrors
 	xcbutilimage
 	xcbutilrenderutil
+	xcbutil
 	xcbutilwm
 	]);
 in
