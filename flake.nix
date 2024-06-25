@@ -1,25 +1,29 @@
 {
-  description = "Dev envrinment for Godot";
+  description = "Godot extention to comminucate with X11 server";
 
-	inputs.nixpkgs.url = "github:nixos/nixpkgs/23.11";
-	inputs.unstable.url = "github:nixos/nixpkgs/nixpkgs-unstable";
-  inputs.flake-utils.url = "github:numtide/flake-utils";
-#  inputs.flake-utils.follows = "nixpkgs";
-  inputs.godot-cpp.url = "github:omgbebebe/godot-cpp";
-#  inputs.godot-cpp.follows = "nixpkgs";
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs/24.05";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    godot-cpp.url = "github:omgbebebe/godot-cpp";
+  };
 
-  outputs = { self, nixpkgs, unstable, flake-utils, godot-cpp }:
-    flake-utils.lib.eachDefaultSystem
-      (system:
-         let mkPkgs = pkgs: extraOverlays: import pkgs {
-               inherit system;
-               config.allowUnfree = true; # forgive me Stallman senpai
-             };
-             pkgs = mkPkgs nixpkgs [];
-             godot-cpp-headers = godot-cpp.packages.${system}.template_debug;
-        in
-        {
-          devShell = import ./shell.nix { inherit pkgs; godot-cpp = godot-cpp-headers; };
-        }
-      );
+  outputs = inputs@{ flake-parts, godot-cpp, ... }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      imports = [];
+      systems = [ "x86_64-linux" "aarch64-linux" ];
+      perSystem = { config, self', inputs', pkgs, system, ... }:
+        let
+          godot-cpp-release = godot-cpp.packages.${system}.template_release;
+          godot-cpp-debug = godot-cpp.packages.${system}.template_debug;
+        in { 
+          packages = rec {
+          release = pkgs.callPackage ./package.nix { godot-cpp = godot-cpp-release; withTarget = "template_release"; };
+          debug = pkgs.callPackage ./package.nix { godot-cpp = godot-cpp-debug; withTarget = "template_debug"; };
+          default = release;
+        };
+        devShells.default = config.packages.debug;
+      };
+      flake = {
+      };
+    };
 }
