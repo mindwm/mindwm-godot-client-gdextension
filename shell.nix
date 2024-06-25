@@ -1,4 +1,4 @@
-{ pkgs ? builtins.currentSystem }:
+{ pkgs ? builtins.currentSystem, godot-cpp }:
 with pkgs;
 let
   inherit (pkgs);
@@ -25,5 +25,7 @@ pkgs.stdenv.mkDerivation {
   shellHook = ''
     LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${lib.makeLibraryPath libs}"
     export PKG_CONFIG_PATH="$PKG_CONFIG_PATH_FOR_TARGET"
+    rm -f ./godot-cpp
+    ln -sf "${godot-cpp.out}" ./godot-cpp
   '';
 }
