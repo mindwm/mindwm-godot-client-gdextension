@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import os
 import sys
-#import platform
 
 env = Environment(tools=["default"], PLATFORM="")
 env.PrependENVPath("PATH", os.getenv("PATH"))
@@ -60,7 +59,7 @@ if env.use_hot_reload:
 
 env.Append(CCFLAGS=["-fPIC", "-Wwrite-strings"])
 env.Append(LINKFLAGS=["-Wl,-R,'$$ORIGIN'"])
-env.Append(LINKFLAGS=["godot-cpp/bin/libgodot-cpp.linux.template_{}.x86_64.a".format(env["mode"])])
+env.Append(LINKFLAGS=["-Lgodot-cpp/bin/"])
 
 if env["arch"] == "x86_64":
     env.Append(CCFLAGS=["-m64", "-march=x86-64"])
@@ -79,8 +78,16 @@ env.Append(CPPDEFINES=["LINUX_ENABLED", "UNIX_ENABLED"])
 # tweak this if you want to use different folders, or more folders, to store your source code in.
 env["ENV"] = os.environ
 env.Append(CPPPATH=["src/", "godot-cpp/include/", "godot-cpp/gen/include/", "godot-cpp/gdextension/" ])
-#env.Append(LIBS=['X11', 'Xfixes', 'X11-xcb', 'xcb', 'xcb-composite', 'xcb-image', 'xcb-randr'])
-env.Append(LIBS=['X11', 'X11-xcb', 'xcb', 'xcb-composite', 'xcb-image', 'xcb-randr', 'xcb-xfixes'])
+env.Append(LIBS=
+    [ 'X11'
+    , 'X11-xcb'
+    , 'xcb'
+    , 'xcb-composite'
+    , 'xcb-image'
+    , 'xcb-randr'
+    , 'xcb-xfixes'
+    , "godot-cpp.linux.template_{}.x86_64.a".format(env["mode"])
+    ])
 sources = Glob("src/*.cpp")
 
 if env["platform"] == "linux":
