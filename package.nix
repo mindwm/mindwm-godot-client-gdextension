@@ -50,6 +50,7 @@ stdenv.mkDerivation {
   installPhase = ''
     mkdir -p "$out/bin"
     cp demo/bin/*.so $out/bin/
+    cp xorg.gdextension $out/
   '';
 
   meta = with lib; {
